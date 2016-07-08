@@ -1,13 +1,14 @@
 import json
 import gzip
-import networkx
+import marshal, types
 
+import networkx
 from networkx.classes.digraph import DiGraph
 from networkx.readwrite import json_graph
 from networkx.algorithms import number_connected_components
 from networkx.drawing.nx_pydot import write_dot
 from networkx.drawing.nx_pylab import draw, draw_circular
-import marshal
+
 
 from Cell import Cell
 from Range import RangeCore, RangeFactory
@@ -24,22 +25,25 @@ def dump(self, fname, marshal = False):
     # write simple cells first
     simple_cells = filter(lambda cell: cell.is_range == False, self.cellmap.values())
     range_cells = filter(lambda cell: cell.is_range, self.cellmap.values())
-    compiled_expressions = {}
+    cell_functions = {}
+    # compiled_expressions = {}
 
     def parse_cell_info(cell):
         formula = cell.formula if cell.formula else "0"
-        python_expression = cell.python_expression if cell.python_expression else "0"
+        # python_expression = cell.python_expression if cell.python_expression else "0"
         should_eval = cell.should_eval
         is_range = "1" if cell.is_range else "0"
         is_named_range = "1" if cell.is_named_range else "0"
 
-        compiled_expressions[cell.address()] = cell.compiled_expression
+        function = marshal.dumps(cell.calculate.func_code)
+        # compiled_expressions[cell.address()] = cell.compiled_expression
 
         # write common attributes
         outfile.write(SEP.join([
             cell.address(),
             formula,
-            python_expression,
+            function,
+            # python_expression,
             is_range,
             is_named_range,
             should_eval
@@ -57,8 +61,8 @@ def dump(self, fname, marshal = False):
         outfile.write(cell.range.name + "\n")
         outfile.write("====" + "\n")
 
-    if marshal:
-        marshal.dump(compiled_expressions, outfile2)
+    # if marshal:
+    #     marshal.dump(compiled_expressions, outfile2)
     
     # writing the edges
     outfile.write("edges" + "\n")
@@ -139,9 +143,11 @@ def load(fname):
             continue
 
         if mode == "node0":
-            [address, formula, python_expression, is_range, is_named_range, should_eval] = line.split(SEP)
+            # [address, formula, python_expression, is_range, is_named_range, should_eval] = line.split(SEP)
+            [address, formula, code, is_range, is_named_range, should_eval] = line.split(SEP)
             formula = clean_bool(formula)
-            python_expression = clean_bool(python_expression)
+            function = types.FunctionType(marshal.loads(code), globals(), "some_func_name")
+            # python_expression = clean_bool(python_expression)
             is_range = to_bool(is_range)
             is_named_range = to_bool(is_named_range)
             should_eval = should_eval
@@ -151,18 +157,20 @@ def load(fname):
                 name = line
                 vv = Range(name)
                 cell = Cell(address, None, vv, formula, is_range, is_named_range, should_eval)
-                cell.python_expression = python_expression
+                cell.calculate = function
+                # cell.python_expression = python_expression
                 nodes.append(cell)
             else:
                 value = to_bool(to_float(line))
                 cell = Cell(address, None, value, formula, is_range, is_named_range, should_eval)
-                cell.python_expression = python_expression
-                if formula:
-                    if marshaled_file:
-                        ce = compiled_expressions[address]
-                        cell.compiled_expression = ce
-                    else:
-                        cell.compile()               
+                cell.calculate = function
+                # cell.python_expression = python_expression
+                # if formula:
+                #     if marshaled_file:
+                #         ce = compiled_expressions[address]
+                #         cell.compiled_expression = ce
+                #     else:
+                #         cell.compile()               
                 nodes.append(cell)
         elif mode == "edges":
             source, target = line.split(SEP)
