@@ -291,13 +291,12 @@ def cell2code(named_ranges, cell, sheet):
         ref = parse_cell_address(cell.address()) if not cell.is_named_range else None
         e = shunting_yard(cell.formula or str(cell.value), named_ranges, ref=ref)
         ast,root = build_ast(e)
-        code = root.emit(ast, context=sheet)
+        function = root.emit(ast, context=sheet)
     else:
         ast = None
-        code = str('"' + cell.value.encode('utf-8') + '"' if isinstance(cell.value,unicode) else cell.value)
-    return code,ast
-
-
+        function = lambda: cell.value.encode('utf-8') if isinstance(cell.value,unicode) else cell.value
+        # code = str('"' + cell.value.encode('utf-8') + '"' if isinstance(cell.value,unicode) else cell.value)
+    return function, ast
 
 def graph_from_seeds(seeds, cell_source):
     """
@@ -337,10 +336,11 @@ def graph_from_seeds(seeds, cell_source):
         ###### 1) looking for cell c1 dependencies ####################
 
         # in case a formula, get all cells that are arguments
-        pystr, ast = cell2code(cell_source.named_ranges, c1, cursheet)
+        f, ast = cell2code(cell_source.named_ranges, c1, cursheet)
+        c1.calculate = f
         # set the code & compile it (will flag problems sooner rather than later)
-        c1.python_expression = pystr
-        c1.compile()    
+        # c1.python_expression = pystr
+        # c1.compile()    
         
         # get all the cells/ranges this formula refers to
         deps = [x.tvalue.replace('$','') for x in ast.nodes() if isinstance(x,RangeNode)]
@@ -450,9 +450,10 @@ def graph_from_seeds(seeds, cell_source):
                         steps.append(step+1)
                     else:
                         # constant cell, no need for further processing, just remember to set the code
-                        pystr,ast = cell2code(cell_source.named_ranges, c2, cursheet)
-                        c2.python_expression = pystr
-                        c2.compile()     
+                        f,ast = cell2code(cell_source.named_ranges, c2, cursheet)
+                        c2.calculate = f
+                        # c2.python_expression = pystr
+                        # c2.compile()     
                     
                     # save in the cellmap
                     cellmap[c2.address()] = c2

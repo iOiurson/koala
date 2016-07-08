@@ -53,6 +53,7 @@ class Cell(object):
             
         self.__formula = str(formula) if formula else None
         self.__value = value
+        self.calculate = None
         self.python_expression = None
         self.need_update = False
         self.should_eval = should_eval

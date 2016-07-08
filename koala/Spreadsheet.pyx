@@ -221,7 +221,7 @@ class Spreadsheet(object):
                     parsed = ""
                 e = shunting_yard(cell["formula"], self.named_ranges, ref=parsed, tokenize_range = True)
                 ast,root = build_ast(e)
-                code = root.emit(ast)
+                # code = root.emit(ast)
                 
                 replacements = self.eval_volatiles_from_ast(ast, root, cell)
 
@@ -479,8 +479,10 @@ class Spreadsheet(object):
         if cell.should_eval == 'normal' and not cell.need_update and cell.value is not None or not cell.formula or cell.should_eval == 'never':
             return cell.value
         try:
-            if cell.compiled_expression != None:
-                vv = eval(cell.compiled_expression)
+            if cell.calculate is not None:
+                vv = cell.calculate()
+            # if cell.compiled_expression != None:
+                # vv = eval(cell.compiled_expression)
             else:
                 vv = 0
             if cell.is_range:
