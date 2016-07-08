@@ -378,5 +378,5 @@ class FunctionNode(ASTNode):
         else:
             # map to the correct name
             f = self.funmap.get(fun,fun)
-            return lambda: f(*tuple([arg.emit(ast,context=context)() for arg in args])
+            return lambda: f(*tuple([arg.emit(ast,context=context)() for arg in args]))
             # return f + "(" + ",".join([n.emit(ast,context=context) for n in args]) + ")"
