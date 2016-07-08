@@ -15,7 +15,7 @@ from koala.ExcelCompiler import ExcelCompiler
 from koala.Spreadsheet import Spreadsheet
 from koala.Cell import Cell
 from koala.Range import RangeCore
-from koala.ast import *
+from koala.astutils import *
 from koala.excellib import *
 
 

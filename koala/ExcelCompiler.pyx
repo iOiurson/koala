@@ -10,7 +10,7 @@ from networkx.algorithms import number_connected_components
 from reader import read_archive, read_named_ranges, read_cells
 from excellib import *
 from utils import *
-from ast import graph_from_seeds
+from astutils import graph_from_seeds
 from ExcelError import *
 from Cell import Cell
 from Range import RangeFactory

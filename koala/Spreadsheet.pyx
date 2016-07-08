@@ -13,7 +13,7 @@ from openpyxl.formula.translate import Translator
 
 from excellib import *
 from utils import *
-from ast import *
+from astutils import *
 from Cell import Cell
 from Range import RangeCore, RangeFactory, parse_cell_address, get_cell_address
 from tokenizer import reverse_rpn
