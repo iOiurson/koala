@@ -2,7 +2,6 @@ import json
 import gzip
 import marshal
 import types
-from ast import literal_eval as make_tuple
 
 import networkx
 from networkx.classes.digraph import DiGraph
@@ -11,7 +10,7 @@ from networkx.algorithms import number_connected_components
 from networkx.drawing.nx_pydot import write_dot
 from networkx.drawing.nx_pylab import draw, draw_circular
 
-
+from ast import literal_eval as make_tuple
 from koala.Cell import Cell
 from koala.Range import RangeCore, RangeFactory
 

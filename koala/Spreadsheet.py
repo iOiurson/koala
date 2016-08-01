@@ -13,7 +13,7 @@ from koala.openpyxl.formula.translate import Translator
 
 from koala.excellib import *
 from koala.utils import *
-from koala.ast import *
+from koala.astutils import *
 from koala.Cell import Cell
 from koala.Range import RangeCore, RangeFactory, parse_cell_address, get_cell_address
 from koala.tokenizer import reverse_rpn
@@ -26,26 +26,26 @@ class Spreadsheet(object):
         self.cellmap = cellmap
         self.named_ranges = named_ranges
 
-        addr_to_name = {}
-        for name in named_ranges:
-            addr_to_name[named_ranges[name]] = name
-        self.addr_to_name = addr_to_name
+        # addr_to_name = {}
+        # for name in named_ranges:
+        #     addr_to_name[named_ranges[name]] = name
+        # self.addr_to_name = addr_to_name
 
-        addr_to_range = {}        
+        # addr_to_range = {}        
         for c in self.cellmap.values():
             f = cell2fun(named_ranges, c, c.sheet, sp = self)
-            print 'C', c.address(), hasattr(c, 'emit')
+            # print 'C', c.address(), hasattr(c, 'emit')
             c.calculate = f
 
-            if c.is_range and len(c.range.keys()) != 0: # could be better, but can't check on Exception types here...
-                addr = c.address() if c.is_named_range else c.range.name
-                for cell in c.range.addresses:
-                    if cell not in addr_to_range:
-                        addr_to_range[cell] = [addr]
-                    else:
-                        addr_to_range[cell].append(addr)
+        #     if c.is_range and len(c.range.keys()) != 0: # could be better, but can't check on Exception types here...
+        #         addr = c.address() if c.is_named_range else c.range.name
+        #         for cell in c.range.addresses:
+        #             if cell not in addr_to_range:
+        #                 addr_to_range[cell] = [addr]
+        #             else:
+        #                 addr_to_range[cell].append(addr)
 
-        self.addr_to_range = addr_to_range
+        # self.addr_to_range = addr_to_range
 
         self.outputs = outputs
         self.inputs = inputs
@@ -557,48 +557,48 @@ class Spreadsheet(object):
         # no formula, fixed value
         if cell.should_eval == 'normal' and not cell.need_update and cell.value is not None or not cell.formula or cell.should_eval == 'never':
             return cell.value
-        try:
-            if cell.calculate is not None:
-                vv = cell.calculate()
-            # if cell.compiled_expression != None:
-                # vv = eval(cell.compiled_expression)
+        # try:
+        if cell.calculate is not None:
+            vv = cell.calculate()
+        # if cell.compiled_expression != None:
+            # vv = eval(cell.compiled_expression)
+        else:
+            vv = 0
+        if cell.is_range:
+            cell.value = vv.values
+        elif isinstance(vv, RangeCore): # this should mean that vv is the result of RangeCore.apply_all, but with only one value inside
+            cell.value = vv.values[0]
+        else:
+            cell.value = vv
+        cell.need_update = False
+        
+        # DEBUG: saving differences
+        if self.save_history:
+            if cell.address() in self.history:
+                ori_value = self.history[cell.address()]['original']
+                
+                if 'new' not in self.history[cell.address()].keys() \
+                    and is_number(ori_value) and is_number(cell.value) \
+                    and abs(float(ori_value) - float(cell.value)) > 0.001:
+
+                    self.count += 1
+                    self.history[cell.address()]['formula'] = str(cell.formula)
+                    self.history[cell.address()]['priority'] = self.count
+                    self.history[cell.address()]['python'] = str(cell.python_expression)
+
+                    if self.count == 1:
+                        self.history['ROOT_DIFF'] = self.history[cell.address()]
+                        self.history['ROOT_DIFF']['cell'] = cell.address()
+
+                self.history[cell.address()]['new'] = str(cell.value)
             else:
-                vv = 0
-            if cell.is_range:
-                cell.value = vv.values
-            elif isinstance(vv, RangeCore): # this should mean that vv is the result of RangeCore.apply_all, but with only one value inside
-                cell.value = vv.values[0]
-            else:
-                cell.value = vv
-            cell.need_update = False
-            
-            # DEBUG: saving differences
-            if self.save_history:
-                if cell.address() in self.history:
-                    ori_value = self.history[cell.address()]['original']
-                    
-                    if 'new' not in self.history[cell.address()].keys() \
-                        and is_number(ori_value) and is_number(cell.value) \
-                        and abs(float(ori_value) - float(cell.value)) > 0.001:
+                self.history[cell.address()] = {'new': str(cell.value)}
 
-                        self.count += 1
-                        self.history[cell.address()]['formula'] = str(cell.formula)
-                        self.history[cell.address()]['priority'] = self.count
-                        self.history[cell.address()]['python'] = str(cell.python_expression)
-
-                        if self.count == 1:
-                            self.history['ROOT_DIFF'] = self.history[cell.address()]
-                            self.history['ROOT_DIFF']['cell'] = cell.address()
-
-                    self.history[cell.address()]['new'] = str(cell.value)
-                else:
-                    self.history[cell.address()] = {'new': str(cell.value)}
-
-        except Exception as e:
-            if e.message is not None and e.message.startswith("Problem evalling"):
-                raise e
-            else:
-                raise Exception("Problem evalling: %s for %s, %s" % (e,cell.address(),cell.python_expression)) 
+        # except Exception as e:
+        #     if e.message is not None and e.message.startswith("Problem evalling"):
+        #         raise e
+        #     else:
+        #         raise Exception("Problem evalling: %s for %s, %s" % (e,cell.address(),cell.python_expression)) 
 
         return cell.value
 

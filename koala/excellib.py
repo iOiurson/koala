@@ -29,15 +29,6 @@ from koala.ExcelError import *
 
 # Note: some functions (if, pi, atan2, and, or, array, ...) are already taken care of
 # in the FunctionNode code, so adding them here will have no effect.
-FUNCTION_MAP = {
-    "ln":"xlog",
-    "min":"xmin",
-    "min":"xmin",
-    "max":"xmax",
-    "sum":"xsum",
-    "gammaln":"lgamma",
-    "round": "xround"
-}
 
 IND_FUN = [        
     "SUM",        
@@ -868,7 +859,15 @@ def vdb(cost, salvage, life, start_period, end_period, factor = 2, no_switch = F
     return result
 
 
-
+FUNCTION_MAP = {
+    "ln": xlog,
+    "min": xmin,
+    "min": xmin,
+    "max": xmax,
+    "sum": xsum,
+    # "gammaln": lgamma,
+    "round": xround
+}
 
 if __name__ == '__main__':
     pass

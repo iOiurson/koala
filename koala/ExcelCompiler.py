@@ -10,7 +10,7 @@ from networkx.algorithms import number_connected_components
 from koala.reader import read_archive, read_named_ranges, read_cells
 from koala.excellib import *
 from koala.utils import *
-from koala.ast import graph_from_seeds, shunting_yard, build_ast, prepare_volatile
+from koala.astutils import graph_from_seeds, shunting_yard, build_ast, prepare_volatile
 from koala.ExcelError import *
 from koala.Cell import Cell
 from koala.Range import RangeFactory
