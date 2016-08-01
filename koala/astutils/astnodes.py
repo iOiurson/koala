@@ -4,7 +4,7 @@ import os.path
 from math import pi
 # import networkx
 
-from koala.excellib import FUNCTION_MAP, IND_FUN, index, offset
+from koala.excellib import FUNCTION_MAP, FUNCTION_MAP_STRING, IND_FUN, index, offset
 from koala.utils import is_range, split_range, split_address, resolve_range
 from koala.ExcelError import *
 from koala.Range import RangeCore
@@ -100,7 +100,7 @@ class OperatorNode(ASTNode):
             "<=": "is_inferior_or_equal"
         }
 
-    def emit(self,ast,context=None, sp = None):
+    def emit(self,ast,context=None, sp = None, mode = 'function'):
 
         xop = self.tvalue
         
@@ -116,27 +116,37 @@ class OperatorNode(ASTNode):
             if (parent is not None and
             (parent.tvalue == 'OFFSET' and 
              parent.children(ast)[0] == self)):
-                return lambda: ':'.join([a.emit(ast,context=context, sp = sp)() for a in args])
-                # return '"%s"' % ':'.join([a.emit(ast,context=context).replace('"', '') for a in args])
+                if mode == 'function':
+                    return lambda: ':'.join([a.emit(ast,context=context, sp = sp, mode = mode)() for a in args])
+                else:
+                    return '"%s"' % ':'.join([a.emit(ast,context=context, mode = mode).replace('"', '') for a in args])
             else:
-                return lambda: sp.eval_ref(*tuple([a.emit(ast,context=context, sp = sp)() for a in args]), ref = self.ref)
-                # return "self.eval_ref(%s, ref = %s)" % (','.join([a.emit(ast,context=context) for a in args]), self.ref)
+                if mode == 'function':
+                    return lambda: sp.eval_ref(*tuple([a.emit(ast,context=context, mode = mode, sp = sp)() for a in args]), ref = self.ref)
+                else:
+                    return "self.eval_ref(%s, ref = %s)" % (','.join([a.emit(ast,context=context, mode = mode) for a in args]), self.ref)
 
          
         if self.ttype == "operator-prefix":
-            return lambda: RangeCore.apply_one('minus', args[0].emit(ast,context=context, sp = sp)(), None, self.ref)
-            # return "RangeCore.apply_one('minus', %s, None, %s)" % (args[0].emit(ast,context=context), str(self.ref))
+            if mode == 'function':
+                return lambda: RangeCore.apply_one('minus', args[0].emit(ast,context=context, sp = sp, mode = mode)(), None, self.ref)
+            else:
+                return "RangeCore.apply_one('minus', %s, None, %s)" % (args[0].emit(ast,context=context, mode = mode), str(self.ref))
 
         if op in ["+", "-", "*", "/", "==", "<>", ">", "<", ">=", "<="]:
             is_special = self.find_special_function(ast)
-            # call = 'apply' + ('_all' if is_special else '')
             function = self.op_range_translator.get(op)
 
-            if is_special:
-                return lambda: RangeCore.apply_all(function, *tuple([a.emit(ast,context=context, sp = sp)() for a in args]))
+            if mode == 'function':
+                if is_special:
+                    return lambda: RangeCore.apply_all(function, *tuple([a.emit(ast,context=context, sp = sp, mode = mode)() for a in args]))
+                else:
+                    return lambda: RangeCore.apply(function, *tuple([a.emit(ast,context=context, sp = sp, mode = mode)() for a in args]))
             else:
-                return lambda: RangeCore.apply(function, *tuple([a.emit(ast,context=context, sp = sp)() for a in args]))
-            # return "RangeCore." + call + "(%s)" % ','.join(["'"+function+"'", str(arg1.emit(ast,context=context)), str(arg2.emit(ast,context=context)), str(self.ref)])
+                arg1 = args[0]
+                arg2 = args[1]
+                call = 'apply' + ('_all' if is_special else '')
+                return "RangeCore." + call + "(%s)" % ','.join(["'"+function+"'", str(arg1.emit(ast,context=context, mode = mode)), str(arg2.emit(ast,context=context, mode = mode)), str(self.ref)])
 
         # IS THIS STILL NEEDED ? SEEMS LIKE NOT
         #TODO silly hack to work around the fact that None < 0 is True (happens on blank cells)
@@ -149,7 +159,7 @@ class OperatorNode(ASTNode):
         # else:
 
         raise Exception('Operator %s not handled' % op)
-        ss = args[0].emit(ast,context=context, sp = sp) + op + args[1].emit(ast,context=context, sp = sp)
+        ss = args[0].emit(ast,context=context, sp = sp, mode = mode) + op + args[1].emit(ast,context=context, sp = sp, mode = mode)
         
         # parent = self.parent(ast)         
 
@@ -162,20 +172,26 @@ class OperatorNode(ASTNode):
 class OperandNode(ASTNode):
     def __init__(self,*args):
         super(OperandNode,self).__init__(*args)
-    def emit(self,ast,context=None, sp = None):
+    def emit(self,ast,context=None, sp = None, mode = 'function'):
         t = self.tsubtype
         
         if t == "logical":
-            return lambda: self.tvalue.lower() == "true"
-            # return str(self.tvalue.lower() == "true")
+            if mode == 'function':
+                return lambda: self.tvalue.lower() == "true"
+            else:
+                return str(self.tvalue.lower() == "true")
         elif t == "text" or t == "error":
             #if the string contains quotes, escape them
-            return lambda: self.tvalue.replace('"','\\"')
-            # val = self.tvalue.replace('"','\\"')
-            # return '"' + val + '"'
+            if mode == 'function':
+                return lambda: self.tvalue.replace('"','\\"')
+            else:
+                val = self.tvalue.replace('"','\\"')
+                return '"' + val + '"'
         else:
-            return lambda: self.tvalue
-            # return str(self.tvalue)
+            if mode == 'function':
+                return lambda: self.tvalue
+            else:
+                return str(self.tvalue)
 
 class RangeNode(OperandNode):
     """Represents a spreadsheet cell, range, named_range, e.g., A5, B3:C20 or INPUT """
@@ -187,20 +203,23 @@ class RangeNode(OperandNode):
     def get_cells(self):
         return resolve_range(self.tvalue)[0]
     
-    def emit(self,ast,context=None, sp = None):
+    def emit(self,ast,context=None, sp = None, mode = 'function'):
 
         if isinstance(self.tvalue, ExcelError):
             if self.debug:
                 print 'WARNING: Excel Error Code found', self.tvalue
-            return lambda: self.tvalue
-            # return self.tvalue
+            
+            if mode == 'function':
+                return lambda: self.tvalue
+            else:
+                return self.tvalue
 
         is_a_range = False
         is_a_named_range = self.tsubtype == "named_range"
 
         if is_a_named_range:
             name = str(self)
-            # my_str = "'" + str(self) + "'" 
+            my_str = "'" + str(self) + "'" 
         else:
             rng = self.tvalue.replace('$','')
             sheet = context + "!" if context else ""
@@ -219,10 +238,10 @@ class RangeNode(OperandNode):
 
             if sh:
                 name = rng
-                # my_str = '"' + rng + '"'
+                my_str = '"' + rng + '"'
             else:
                 name = sheet + rng
-                # my_str = '"' + sheet + rng + '"'
+                my_str = '"' + sheet + rng + '"'
 
         to_eval = True
         # exception for formulas which use the address and not it content as ":" or "OFFSET"
@@ -234,22 +253,26 @@ class RangeNode(OperandNode):
             (parent.tvalue == 'CHOOSE' and parent.children(ast)[0] != self and self.tsubtype == "named_range"))):
             to_eval = False
 
-        # if parent is None and is_a_named_range: # When a named range is referenced in a cell without any prior operation
-        #     return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
                         
         if to_eval == False:
-            return lambda: name
-            # return my_str
+            if mode == 'function':
+                return lambda: name
+            else:
+                return my_str
 
         # OFFSET HANDLER
         elif (parent is not None and parent.tvalue == 'OFFSET' and
              parent.children(ast)[1] == self and self.tsubtype == "named_range"):
-            return lambda: sp.eval_ref(name, ref = self.ref)
-            # return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
+            if mode == 'function':
+                return lambda: sp.eval_ref(name, ref = self.ref)
+            else:
+                return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
         elif (parent is not None and parent.tvalue == 'OFFSET' and
              parent.children(ast)[2] == self and self.tsubtype == "named_range"):
-            return lambda: sp.eval_ref(name, ref = self.ref)
-            # return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
+            if mode == 'function':
+                return lambda: sp.eval_ref(name, ref = self.ref)
+            else:
+                return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
 
         # INDEX HANDLER
         elif (parent is not None and parent.tvalue == 'INDEX' and
@@ -259,31 +282,45 @@ class RangeNode(OperandNode):
 
             # we don't use eval_ref here to avoid empty cells (which are not included in Ranges)
             if is_a_named_range:
-                return lambda: resolve_range(self.named_ranges[name])
-                # return 'resolve_range(self.named_ranges[%s])' % my_str
+                if mode == 'function':
+                    return lambda: resolve_range(self.named_ranges[name])
+                else:
+                    return 'resolve_range(self.named_ranges[%s])' % my_str
             else:
-                return lambda: resolve_range(name)
-                # return 'resolve_range(%s)' % my_str
+                if mode == 'function':
+                    return lambda: resolve_range(name)
+                else:
+                    return 'resolve_range(%s)' % my_str
         
         elif (parent is not None and parent.tvalue == 'INDEX' and
              parent.children(ast)[1] == self and self.tsubtype == "named_range"):
-            return lambda: sp.eval_ref(name, ref = self.ref)
-            # return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
+            if mode == 'function':
+                return lambda: sp.eval_ref(name, ref = self.ref)
+            else:
+                return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
         elif (parent is not None and parent.tvalue == 'INDEX' and
              parent.children(ast)[2] == self and self.tsubtype == "named_range"):
-            return lambda: sp.eval_ref(name, ref = self.ref)
-            # return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
+            if mode == 'function':
+                return lambda: sp.eval_ref(name, ref = self.ref)
+            else:
+                return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
         # MATCH HANDLER
         elif parent is not None and parent.tvalue == 'MATCH' \
              and (parent.children(ast)[0] == self or len(parent.children(ast)) == 3 and parent.children(ast)[2] == self):
-            return lambda: sp.eval_ref(name, ref = self.ref)
-            # return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
+            if mode == 'function':
+                return lambda: sp.eval_ref(name, ref = self.ref)
+            else:
+                return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
         elif self.find_special_function(ast) or self.has_ind_func_parent(ast):
-            return lambda: sp.eval_ref(name)
-            # return 'self.eval_ref(%s)' % my_str
+            if mode == 'function':
+                return lambda: sp.eval_ref(name)
+            else:
+                return 'self.eval_ref(%s)' % my_str
         else:
-            return lambda: sp.eval_ref(name, ref = self.ref)
-            # return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
+            if mode == 'function':
+                return lambda: sp.eval_ref(name, ref = self.ref)
+            else:
+                return 'self.eval_ref(%s, ref = %s)' % (my_str, str(self.ref))
     
 class FunctionNode(ASTNode):
 
@@ -294,8 +331,9 @@ class FunctionNode(ASTNode):
         self.debug = False
         # map  excel functions onto their python equivalents
         self.funmap = FUNCTION_MAP
+        self.funmap_string = FUNCTION_MAP_STRING
         
-    def emit(self,ast,context=None, sp = None):
+    def emit(self,ast,context=None, sp = None, mode = 'function'):
         fun = self.tvalue.lower()
 
         # Get the arguments
@@ -303,12 +341,16 @@ class FunctionNode(ASTNode):
 
         if fun == "atan2":
             # swap arguments
-            return lambda: atan2(*tuple([args[1].emit(ast,context=context, sp = sp)(), args[0].emit(ast,context=context, sp = sp)()]))
-            # return "atan2(%s,%s)" % (args[1].emit(ast,context=context),args[0].emit(ast,context=context))
+            if mode == 'function':
+                return lambda: atan2(*tuple([args[1].emit(ast,context=context, sp = sp, mode = mode)(), args[0].emit(ast,context=context, sp = sp, mode = mode)()]))
+            else:
+                return "atan2(%s,%s)" % (args[1].emit(ast,context=context, mode = mode),args[0].emit(ast,context=context, mode = mode))
         elif fun == "pi":
             # constant, no parens
-            return lambda: pi
-            # return "pi"
+            if mode == 'function':
+                return lambda: pi
+            else:
+                return "pi"
         elif fun == "if":
             # inline the if
 
@@ -324,62 +366,86 @@ class FunctionNode(ASTNode):
                     break
 
             if is_range: # hack to filter Ranges when necessary,for instance situations like {=IF(A1:A3 > 0; A1:A3; 0)}
-                return lambda: RangeCore.filter(self.eval_ref(range), args[0].emit(ast,context=context, sp = sp)())
-                # return 'RangeCore.filter(self.eval_ref("%s"), %s)' % (range, args[0].emit(ast,context=context))
+                if mode == 'function':
+                    return lambda: RangeCore.filter(self.eval_ref(range), args[0].emit(ast,context=context, sp = sp, mode = mode)())
+                else:
+                    return 'RangeCore.filter(self.eval_ref("%s"), %s)' % (range, args[0].emit(ast,context=context, mode = mode))
             if len(args) == 2:
-                return lambda: args[1].emit(ast,context=context, sp = sp)() if args[0].emit(ast,context=context, sp = sp)() else 0
-                # return "%s if %s else 0" %(args[1].emit(ast,context=context),args[0].emit(ast,context=context))
+                if mode == 'function':
+                    return lambda: args[1].emit(ast,context=context, sp = sp, mode = mode)() if args[0].emit(ast,context=context, sp = sp, mode = mode)() else 0
+                else:
+                    return "%s if %s else 0" %(args[1].emit(ast,context=context, mode = mode),args[0].emit(ast,context=context, mode = mode))
             elif len(args) == 3:
-                return lambda: args[1].emit(ast,context=context, sp = sp)() if args[0].emit(ast,context=context, sp = sp)() else args[2].emit(ast,context=context, sp = sp)
-                # return "(%s if %s else %s)" % (args[1].emit(ast,context=context),args[0].emit(ast,context=context),args[2].emit(ast,context=context))
+                if mode == 'function':
+                    return lambda: args[1].emit(ast,context=context, sp = sp, mode = mode)() if args[0].emit(ast,context=context, sp = sp, mode = mode)() else args[2].emit(ast,context=context, sp = sp, mode = mode)
+                else:
+                    return "(%s if %s else %s)" % (args[1].emit(ast,context=context, mode = mode),args[0].emit(ast,context=context, mode = mode),args[2].emit(ast,context=context, mode = mode))
             else:
                 raise Exception("if with %s arguments not supported" % len(args))
 
         elif fun == "array":
 
             # careful with multiple rows arrays
-            return lambda: [arg.emit(ast,context=context, sp = sp)() for arg in args]
+            if mode == 'function':
+                return lambda: [arg.emit(ast,context=context, sp = sp, mode = mode)() for arg in args]
+            else:
+                my_str = '['
+                if len(args) == 1:
+                    # only one row
+                    my_str += args[0].emit(ast,context=context, mode = mode)
+                else:
+                    # multiple rows
+                    my_str += ",".join(['[' + n.emit(ast,context=context, mode = mode) + ']' for n in args])
+                         
+                my_str += ']'
 
-            # my_str = '['
-            # if len(args) == 1:
-            #     # only one row
-            #     my_str += args[0].emit(ast,context=context)
-            # else:
-            #     # multiple rows
-            #     my_str += ",".join(['[' + n.emit(ast,context=context) + ']' for n in args])
-                     
-            # my_str += ']'
-
-            # return my_str
+                return my_str
         elif fun == "arrayrow":
             #simply create a list
 
             # might not be correct
-            return lambda: [arg.emit(ast,context=context, sp = sp)() for arg in args]
-            # return ",".join([n.emit(ast,context=context) for n in args])
+            if mode == 'function':
+                return lambda: [arg.emit(ast,context=context, sp = sp, mode = mode)() for arg in args]
+            else:
+                return ",".join([n.emit(ast,context=context, mode = mode) for n in args])
 
         elif fun == "and":
-            return lambda: all([arg.emit(ast,context=context, sp = sp)() for arg in args])
-            # return "all([" + ",".join([n.emit(ast,context=context) for n in args]) + "])"
+            if mode == 'function':
+                return lambda: all([arg.emit(ast,context=context, sp = sp, mode = mode)() for arg in args])
+            else:
+                return "all([" + ",".join([n.emit(ast,context=context, mode = mode) for n in args]) + "])"
         elif fun == "or":
-            return lambda: any([arg.emit(ast,context=context, sp = sp)() for arg in args])
-            # return "any([" + ",".join([n.emit(ast,context=context) for n in args]) + "])"
+            if mode == 'function':
+                return lambda: any([arg.emit(ast,context=context, sp = sp, mode = mode)() for arg in args])
+            else:
+                return "any([" + ",".join([n.emit(ast,context=context, mode = mode) for n in args]) + "])"
         elif fun == "index":
             if self.parent(ast) is not None and self.parent(ast).tvalue == ':':
-                return lambda: index(*tuple([arg.emit(ast,context=context, sp = sp)() for arg in args]))
-                # return 'index(' + ",".join([n.emit(ast,context=context) for n in args]) + ")"
+                if mode == 'function':
+                    return lambda: index(*tuple([arg.emit(ast,context=context, sp = sp, mode = mode)() for arg in args]))
+                else:
+                    return 'index(' + ",".join([n.emit(ast,context=context, mode = mode) for n in args]) + ")"
             else:
-                return lambda: sp.eval_ref(index(*tuple([arg.emit(ast,context=context, sp = sp)() for arg in args])), ref = self.ref) 
-                # return 'self.eval_ref(index(%s), ref = %s)' % (",".join(), self.ref)
+                if mode == 'function':
+                    return lambda: sp.eval_ref(index(*tuple([arg.emit(ast,context=context, sp = sp, mode = mode)() for arg in args])), ref = self.ref) 
+                else:
+                    return 'self.eval_ref(index(%s), ref = %s)' % (",".join([n.emit(ast,context=context, mode = mode) for n in args]), self.ref)
         elif fun == "offset":
             if self.parent(ast) is None or self.parent(ast).tvalue == ':':
-                return lambda: offset(*tuple([arg.emit(ast,context=context, sp = sp)() for arg in args]))
-                # return 'offset(' + ",".join([n.emit(ast,context=context) for n in args]) + ")"
+                if mode == 'function':
+                    return lambda: offset(*tuple([arg.emit(ast,context=context, sp = sp, mode = mode)() for arg in args]))
+                else:
+                    return 'offset(' + ",".join([n.emit(ast,context=context, mode = mode) for n in args]) + ")"
             else:
-                return lambda: sp.eval_ref(offset(*tuple([arg.emit(ast,context=context, sp = sp)() for arg in args])), ref = self.ref)
-                # return 'self.eval_ref(offset(%s), ref = %s)' % (",".join([n.emit(ast,context=context) for n in args]), self.ref)
+                if mode == 'function':
+                    return lambda: sp.eval_ref(offset(*tuple([arg.emit(ast,context=context, sp = sp, mode = mode)() for arg in args])), ref = self.ref)
+                else:
+                    return 'self.eval_ref(offset(%s), ref = %s)' % (",".join([n.emit(ast,context=context, mode = mode) for n in args]), self.ref)
         else:
             # map to the correct name
-            f = self.funmap.get(fun,fun)
-            return lambda: f(*tuple([arg.emit(ast,context=context, sp = sp)() for arg in args]))
-            # return f + "(" + ",".join([n.emit(ast,context=context) for n in args]) + ")"
+            if mode == 'function':
+                f = self.funmap.get(fun,fun)
+                return lambda: f(*tuple([arg.emit(ast,context=context, sp = sp, mode = mode)() for arg in args]))
+            else:
+                f = self.funmap_string.get(fun,fun)
+                return f + "(" + ",".join([n.emit(ast,context=context, mode = mode) for n in args]) + ")"

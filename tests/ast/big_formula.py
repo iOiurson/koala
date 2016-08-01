@@ -26,12 +26,18 @@ sp = c.gen_graph()
 
 # sp.dump('big_formula.gzip')
 # sp = Spreadsheet.load('big_formula.gzip')
-
-ori = sp.evaluate('Sheet1!A1')
-
+sp.mode = 'string'
 sp.set_value('Sheet1!A1', 10)
 
 startTime = datetime.now()
-print 'Thru Eval', sp.evaluate('Sheet1!G2')
+print 'String mode', sp.evaluate('Sheet1!G2')
 print "___Timing___  Eval done in %s" % (str(datetime.now() - startTime))
 
+sp.mode = 'function'
+sp.set_value('Sheet1!A1', 1)
+sp.set_value('Sheet1!A1', 10)
+
+
+startTime = datetime.now()
+print 'Function mode', sp.evaluate('Sheet1!G2')
+print "___Timing___  Eval done in %s" % (str(datetime.now() - startTime))

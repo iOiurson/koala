@@ -34,7 +34,6 @@ class Spreadsheet(object):
         # addr_to_range = {}        
         for c in self.cellmap.values():
             f = cell2fun(named_ranges, c, c.sheet, sp = self)
-            # print 'C', c.address(), hasattr(c, 'emit')
             c.calculate = f
 
         #     if c.is_range and len(c.range.keys()) != 0: # could be better, but can't check on Exception types here...
@@ -47,6 +46,7 @@ class Spreadsheet(object):
 
         # self.addr_to_range = addr_to_range
 
+        self.mode = 'function'
         self.outputs = outputs
         self.inputs = inputs
         self.save_history = False
@@ -558,12 +558,19 @@ class Spreadsheet(object):
         if cell.should_eval == 'normal' and not cell.need_update and cell.value is not None or not cell.formula or cell.should_eval == 'never':
             return cell.value
         # try:
-        if cell.calculate is not None:
-            vv = cell.calculate()
-        # if cell.compiled_expression != None:
-            # vv = eval(cell.compiled_expression)
+
+        if self.mode == 'function':
+            if cell.calculate is not None:
+                print 'F'
+                vv = cell.calculate()
+            else:
+                vv = 0
         else:
-            vv = 0
+            if cell.compiled_expression != None:
+                print 'S'
+                vv = eval(cell.compiled_expression)
+            else:
+                vv = 0
         if cell.is_range:
             cell.value = vv.values
         elif isinstance(vv, RangeCore): # this should mean that vv is the result of RangeCore.apply_all, but with only one value inside

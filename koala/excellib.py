@@ -869,6 +869,16 @@ FUNCTION_MAP = {
     "round": xround
 }
 
+FUNCTION_MAP_STRING = {
+    "ln": "xlog",
+    "min": "xmin",
+    "min": "xmin",
+    "max": "xmax",
+    "sum": "xsum",
+    # "gammaln": lgamma,
+    "round": "xround"
+}
+
 if __name__ == '__main__':
     pass
 

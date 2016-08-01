@@ -377,6 +377,18 @@ def cell2fun(named_ranges, cell, sheet, sp = None):
         # code = str('"' + cell.value.encode('utf-8') + '"' if isinstance(cell.value,unicode) else cell.value)
     return function
 
+def cell2code(named_ranges, cell, sheet, sp = None):
+    """Generate python code for the given cell"""
+    if cell.formula:
+        ref = parse_cell_address(cell.address()) if not cell.is_named_range else None
+        e = shunting_yard(cell.formula or str(cell.value), named_ranges, ref=ref)
+        ast,root = build_ast(e)
+        code = root.emit(ast, context=sheet, sp = sp, mode = 'string')
+    else:
+        ast = None
+        code = str('"' + cell.value.encode('utf-8') + '"' if isinstance(cell.value,unicode) else cell.value)
+    return ast, code
+
 
 def prepare_volatile(code, names, ref_cell = None):
     # if ref_cell is None, it means that the volatile is a named_range
@@ -463,7 +475,10 @@ def graph_from_seeds(seeds, cell_source):
         ###### 1) looking for cell c1 dependencies ####################
         # print 'C1', c1.address()
          # in case a formula, get all cells that are arguments
-        ast = cell2ast(cell_source.named_ranges, c1, cursheet)
+        # ast = cell2ast(cell_source.named_ranges, c1, cursheet)
+
+        ast, pystr = cell2code(cell_source.named_ranges, c1, cursheet)
+        c1.python_expression = pystr.replace('"', "'")
         # c1.calculate = fun
 
         # get all the cells/ranges this formula refers to
@@ -597,6 +612,6 @@ def graph_from_seeds(seeds, cell_source):
                     # print "Adding edge %s --> %s" % (c2.address(), target.address())
                     G.add_edge(cellmap[c2.address()],target)
         
-        # c1.compile() # cell compilation is done here because volatile ranges might update python_expressions 
+        c1.compile() # cell compilation is done here because volatile ranges might update python_expressions 
 
     return (cellmap, G)
