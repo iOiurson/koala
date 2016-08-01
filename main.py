@@ -1,4 +1,3 @@
-import pyximport; pyximport.install()
 
 import glob, re, sys
 from datetime import datetime
@@ -10,7 +9,6 @@ from io import BytesIO
 from multiprocessing import Pool
 
 from koala.reader import read_archive, read_named_ranges, read_cells
-from koala.tokenizer import ExcelParser
 from koala import ExcelCompiler, Spreadsheet
 
 
